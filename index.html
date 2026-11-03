@@ -483,23 +483,24 @@
   }
 
   function deleteHistoryItem(id) {
-    const item = state.history.find(h => h.id === id);
-    if (!item) return;
-    if (!confirm(`Удалить «${item.title}» из журнала?`)) return;
+  const targetId = String(id);
+  const item = state.history.find(h => String(h.id) === targetId);
+  if (!item) return;
+  if (!confirm(`Удалить «${item.title}» из журнала?`)) return;
 
-    if (item.type === 'task') {
-      state.balance -= item.points;
-      state.totalEarned -= item.points;
-    } else {
-      state.balance += item.points;
-      state.totalSpent -= item.points;
-    }
-
-    state.history = state.history.filter(h => h.id !== id);
-    saveState();
-
-    sendToGoogleSheets('delete', { id: id });
+  if (item.type === 'task') {
+    state.balance -= item.points;
+    state.totalEarned -= item.points;
+  } else {
+    state.balance += item.points;
+    state.totalSpent -= item.points;
   }
+
+  state.history = state.history.filter(h => String(h.id) !== targetId);
+  saveState();
+
+  sendToGoogleSheets('delete', { id: targetId });
+}
 
   function manualEditBalance() {
     const val = prompt('Укажите точный баланс (₽):', state.balance);
