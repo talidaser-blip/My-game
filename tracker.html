@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Система Геймификации Жизни</title>
+  <style>
+    :root {
+      --bg: #121316;
+      --card-bg: #1e2025;
+      --accent: #4f46e5;
+      --accent-hover: #4338ca;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --border: #2d3139;
+      --success: #10b981;
+      --gold: #fbbf24;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 20px; display: flex; justify-content: center; }
+    .container { width: 100%; max-width: 1000px; display: flex; flex-direction: column; gap: 20px; }
+    
+    /* Шапка баланса */
+    .balance-card {
+      background: linear-gradient(135deg, #1e2025 0%, #262933 100%);
+      border: 1px solid var(--border);
+      padding: 20px;
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .balance-title { font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .balance-value { font-size: 38px; font-weight: 700; color: var(--gold); margin-top: 4px; cursor: pointer; }
+    .sync-status { font-size: 12px; color: var(--success); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+    .backup-actions { display: flex; gap: 8px; }
+
+    /* Сетка */
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+    
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+    h2 { font-size: 17px; font-weight: 600; }
+    
+    /* Поля ввода и кнопки */
+    .input-row { display: flex; gap: 8px; }
+    input, select, button {
+      background: #121316;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    input { flex: 1; }
+    input:focus, select:focus { outline: 1px solid var(--accent); }
+    button {
+      background: var(--accent);
+      cursor: pointer;
+      font-weight: 500;
+      border: none;
+      transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.9; }
+    .btn-secondary { background: #2d3139; font-size: 12px; padding: 6px 12px; }
+    
+    /* Списки дел и наград */
+    .items-list { display: flex; flex-direction: column; gap: 8px; list-style: none; max-height: 380px; overflow-y: auto; }
+    .list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #17181d;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .badge {
+      background: rgba(251, 191, 36, 0.15);
+      color: var(--gold);
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      margin-left: 8px;
+    }
+    .action-btn { padding: 6px 10px; font-size: 12px; border-radius: 4px; }
+    .btn-complete { background: var(--success); color: #fff; }
+    .btn-buy { background: #d97706; color: #fff; }
+    .btn-icon { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 4px 6px; font-size: 14px; }
+    .btn-icon:hover { color: #fff; }
+    .btn-icon.del:hover { color: var(--danger); }
+
+    /* Таблицы */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--text-muted); font-weight: 600; }
+    
+    /* Журнал */
+    .journal-box { max-height: 320px; overflow-y: auto; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+    .journal-item {
+      background: #17181d;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .journal-date { color: var(--text-muted); font-size: 11px; margin-top: 3px; }
+    .stat-badge { font-weight: bold; color: var(--gold); }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Блок Баланса -->
+  <div class="balance-card">
+    <div>
+      <div class="balance-title">Текущий общий баланс (нажмите для изменения)</div>
+      <div class="balance-value" onclick="manualEditBalance()" title="Редактировать баланс"><span id="pointsBalance">0</span> ₽</div>
+      <div class="sync-status">🟢 Google Таблица подключена</div>
+    </div>
+    <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+      Всего заработано: <span id="totalEarned" style="color: #fff;">0</span> ₽<br>
+      Всего потрачено: <span id="totalSpent" style="color: #fff;">0</span> ₽
+    </div>
+    <div class="backup-actions">
+      <button class="btn-secondary" onclick="exportData()">💾 Бэкап</button>
+      <button class="btn-secondary" onclick="document.getElementById('importFile').click()">📂 Загрузить</button>
+      <input type="file" id="importFile" style="display: none;" onchange="importData(event)">
+    </div>
+  </div>
+
+  <!-- Квесты и Награды -->
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Дела и Квесты</h2>
+      </div>
+      <div class="input-row">
+        <input type="text" id="taskTitle" placeholder="Новое дело...">
+        <input type="number" id="taskPoints" placeholder="₽" style="max-width: 80px;" min="1" value="50">
+        <button onclick="addTask()">+</button>
+      </div>
+      <ul class="items-list" id="tasksList"></ul>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Магазин Наград</h2>
+      </div>
+      <div class="input-row">
+        <input type="text" id="rewardTitle" placeholder="Награда / Покупка...">
+        <input type="number" id="rewardCost" placeholder="₽" style="max-width: 80px;" min="1" value="150">
+        <button onclick="addReward()">+</button>
+      </div>
+      <ul class="items-list" id="rewardsList"></ul>
+    </div>
+  </div>
+
+  <!-- Сводные таблицы и аналитика -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Сводные итоги и статистика</h2>
+    </div>
+    <div style="display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 8px;">
+      <div>Сегодня: выполнено <span id="todayTasksCount" class="stat-badge">0</span> дел, заработано <span id="todayEarned" class="stat-badge">0</span> ₽</div>
+      <div>За текущий месяц: выполнено <span id="monthTasksCount" class="stat-badge">0</span> дел, заработано <span id="monthEarned" class="stat-badge">0</span> ₽</div>
+    </div>
+
+    <div class="grid" style="gap: 16px;">
+      <div>
+        <div style="font-size: 14px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Сравнение по неделям (текущий месяц)</div>
+        <table>
+          <thead>
+            <tr><th>Период</th><th>Дел</th><th>Сумма (₽)</th></tr>
+          </thead>
+          <tbody id="weeksTableBody"></tbody>
+        </table>
+      </div>
+
+      <div>
+        <div style="font-size: 14px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Годовой отчет (по месяцам)</div>
+        <table>
+          <thead>
+            <tr><th>Месяц</th><th>Дел</th><th>Сумма (₽)</th></tr>
+          </thead>
+          <tbody id="yearTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Журнал активности с фильтром по месяцам -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Журнал активности</h2>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <label for="journalMonthFilter" style="font-size: 13px; color: var(--text-muted);">Период:</label>
+        <select id="journalMonthFilter" onchange="render()" style="padding: 4px 8px; font-size: 13px;">
+          <option value="current">Только текущий месяц</option>
+          <option value="all">Все месяцы (полная история)</option>
+        </select>
+      </div>
+    </div>
+    <div class="journal-box" id="journalList"></div>
+  </div>
+</div>
+
+<script>
+  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyezcOB-j23-r-vkpmSddEVS7c9DBORH9eGHaqlrxHk_99f3WmlC3GWpuCNeY8OFTH4/exec';
+  const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+  const DEFAULT_TASKS = [
+    { id: 1, title: 'Урок по английскому самост', points: 20 },
+    { id: 2, title: 'Урок по английскому с Луизой', points: 20 },
+    { id: 3, title: 'Посуду помыть повседн', points: 15 },
+    { id: 4, title: 'Помыть посуду генералка', points: 100 },
+    { id: 5, title: 'Помыть полы повседневно', points: 15 },
+    { id: 6, title: 'Помыть полы генералка', points: 100 },
+    { id: 7, title: 'Пыль протереть повседневка', points: 20 },
+    { id: 8, title: 'Помыть туалеты повседневка', points: 15 },
+    { id: 9, title: 'Помыть туалеты генералка', points: 100 },
+    { id: 10, title: 'Разобрать вещи', points: 50 },
+    { id: 11, title: 'Стирка', points: 20 },
+    { id: 12, title: 'Уборка во дворе', points: 50 },
+    { id: 13, title: 'Урок по безопасности', points: 50 },
+    { id: 14, title: 'Урок по шортасам', points: 50 },
+    { id: 15, title: 'Адоб Сток работа', points: 20 }
+  ];
+
+  let state = {
+    balance: 0,
+    totalEarned: 0,
+    totalSpent: 0,
+    tasks: DEFAULT_TASKS,
+    rewards: [
+      { id: 1, title: 'Маркеры / блокнот', cost: 100 },
+      { id: 2, title: 'Вкусный кофе / десерт', cost: 200 }
+    ],
+    history: []
+  };
+
+  function loadState() {
+    const saved = localStorage.getItem('life_game_data_rub');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        state.balance = typeof parsed.balance === 'number' ? parsed.balance : 0;
+        state.totalEarned = typeof parsed.totalEarned === 'number' ? parsed.totalEarned : 0;
+        state.totalSpent = typeof parsed.totalSpent === 'number' ? parsed.totalSpent : 0;
+        state.tasks = (Array.isArray(parsed.tasks) && parsed.tasks.length > 0) ? parsed.tasks : DEFAULT_TASKS;
+        state.rewards = (Array.isArray(parsed.rewards) && parsed.rewards.length > 0) ? parsed.rewards : state.rewards;
+        state.history = Array.isArray(parsed.history) ? parsed.history : [];
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    render();
+  }
+
+  function saveState() {
+    localStorage.setItem('life_game_data_rub', JSON.stringify(state));
+    render();
+  }
+
+  function sendToGoogleSheets(action, payloadData) {
+    if (!GOOGLE_SCRIPT_URL) return;
+    fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: action, ...payloadData })
+    }).catch(err => console.error('Ошибка Google Таблицы:', err));
+  }
+
+  function addTask() {
+    const title = document.getElementById('taskTitle').value.trim();
+    const points = parseInt(document.getElementById('taskPoints').value, 10);
+    if (!title || isNaN(points) || points <= 0) return;
+    state.tasks.push({ id: Date.now(), title, points });
+    document.getElementById('taskTitle').value = '';
+    saveState();
+  }
+
+  function editTask(id) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+    const newTitle = prompt('Название дела:', task.title);
+    if (newTitle === null) return;
+    const newPoints = prompt('Сумма (₽):', task.points);
+    if (newPoints === null) return;
+    const p = parseInt(newPoints, 10);
+    if (newTitle.trim() && !isNaN(p) && p > 0) {
+      task.title = newTitle.trim();
+      task.points = p;
+      saveState();
+    }
+  }
+
+  function deleteTask(id) {
+    if (!confirm('Удалить это дело из списка?')) return;
+    state.tasks = state.tasks.filter(t => t.id !== id);
+    saveState();
+  }
+
+  function completeTask(id) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+
+    state.balance += task.points;
+    state.totalEarned += task.points;
+
+    const recordId = Date.now();
+    const now = new Date();
+    const dateTimeStr = `${now.toLocaleDateString('ru-RU')} ${now.toTimeString().slice(0, 5)}`;
+
+    state.history.unshift({
+      id: recordId,
+      type: 'task',
+      title: task.title,
+      points: task.points,
+      timestamp: now.toISOString(),
+      dateTimeStr: dateTimeStr
+    });
+
+    saveState();
+
+    sendToGoogleSheets('add', {
+      id: recordId,
+      dateTime: "'" + dateTimeStr,
+      actionType: 'Выполнено дело',
+      title: task.title,
+      points: task.points,
+      balance: state.balance
+    });
+  }
+
+  function addReward() {
+    const title = document.getElementById('rewardTitle').value.trim();
+    const cost = parseInt(document.getElementById('rewardCost').value, 10);
+    if (!title || isNaN(cost) || cost <= 0) return;
+    state.rewards.push({ id: Date.now(), title, cost });
+    document.getElementById('rewardTitle').value = '';
+    saveState();
+  }
+
+  function editReward(id) {
+    const r = state.rewards.find(x => x.id === id);
+    if (!r) return;
+    const newTitle = prompt('Название награды:', r.title);
+    if (newTitle === null) return;
+    const newCost = prompt('Цена (₽):', r.cost);
+    if (newCost === null) return;
+    const c = parseInt(newCost, 10);
+    if (newTitle.trim() && !isNaN(c) && c > 0) {
+      r.title = newTitle.trim();
+      r.cost = c;
+      saveState();
+    }
+  }
+
+  function deleteReward(id) {
+    if (!confirm('Удалить эту награду?')) return;
+    state.rewards = state.rewards.filter(r => r.id !== id);
+    saveState();
+  }
+
+  function buyReward(id) {
+    const reward = state.rewards.find(r => r.id === id);
+    if (!reward) return;
+    if (state.balance < reward.cost) {
+      alert('Недостаточно рублей на балансе!');
+      return;
+    }
+    state.balance -= reward.cost;
+    state.totalSpent += reward.cost;
+
+    const recordId = Date.now();
+    const now = new Date();
+    const dateTimeStr = `${now.toLocaleDateString('ru-RU')} ${now.toTimeString().slice(0, 5)}`;
+
+    state.history.unshift({
+      id: recordId,
+      type: 'reward',
+      title: reward.title,
+      points: reward.cost,
+      timestamp: now.toISOString(),
+      dateTimeStr: dateTimeStr
+    });
+
+    saveState();
+
+    sendToGoogleSheets('add', {
+      id: recordId,
+      dateTime: "'" + dateTimeStr,
+      actionType: 'Куплена награда',
+      title: reward.title,
+      points: -reward.cost,
+      balance: state.balance
+    });
+  }
+
+  function editHistoryItem(id) {
+    const item = state.history.find(h => h.id === id);
+    if (!item) return;
+
+    const newTitle = prompt('Наименование записи:', item.title);
+    if (newTitle === null) return;
+    const newPoints = prompt('Сумма в рублях:', item.points);
+    if (newPoints === null) return;
+
+    const parsedPoints = parseInt(newPoints, 10);
+    if (newTitle.trim() && !isNaN(parsedPoints) && parsedPoints >= 0) {
+      const diff = parsedPoints - item.points;
+      if (item.type === 'task') {
+        state.balance += diff;
+        state.totalEarned += diff;
+      } else {
+        state.balance -= diff;
+        state.totalSpent += diff;
+      }
+      item.title = newTitle.trim();
+      item.points = parsedPoints;
+      saveState();
+
+      sendToGoogleSheets('edit', {
+        id: id,
+        title: item.title,
+        points: item.type === 'task' ? item.points : -item.points,
+        balance: state.balance
+      });
+    }
+  }
+
+  function deleteHistoryItem(id) {
+    const item = state.history.find(h => h.id === id);
+    if (!item) return;
+    if (!confirm(`Удалить «${item.title}» из журнала?`)) return;
+
+    if (item.type === 'task') {
+      state.balance -= item.points;
+      state.totalEarned -= item.points;
+    } else {
+      state.balance += item.points;
+      state.totalSpent -= item.points;
+    }
+
+    state.history = state.history.filter(h => h.id !== id);
+    saveState();
+
+    sendToGoogleSheets('delete', { id: id });
+  }
+
+  function manualEditBalance() {
+    const val = prompt('Укажите точный баланс (₽):', state.balance);
+    if (val === null) return;
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed)) {
+      state.balance = parsed;
+      saveState();
+    }
+  }
+
+  function parseItemDate(item) {
+    if (item.timestamp) return new Date(item.timestamp);
+    if (item.dateTimeStr) {
+      const parts = item.dateTimeStr.split(' ');
+      const dateParts = parts[0].split('.');
+      if (dateParts.length === 3) {
+        return new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T00:00:00`);
+      }
+    }
+    return new Date();
+  }
+
+  function formatDisplayDate(item) {
+    if (item.dateTimeStr) return item.dateTimeStr;
+    const d = parseItemDate(item);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const time = d.toTimeString().slice(0, 5);
+    return `${day}.${month}.${year} ${time}`;
+  }
+
+  function render() {
+    document.getElementById('pointsBalance').textContent = state.balance;
+    document.getElementById('totalEarned').textContent = state.totalEarned;
+    document.getElementById('totalSpent').textContent = state.totalSpent;
+
+    // Список квестов
+    document.getElementById('tasksList').innerHTML = state.tasks.map(t => `
+      <li class="list-item">
+        <div>
+          <span>${t.title}</span>
+          <span class="badge">+${t.points} ₽</span>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <button class="action-btn btn-complete" onclick="completeTask(${t.id})">Выполнить</button>
+          <button class="btn-icon" onclick="editTask(${t.id})" title="Редактировать">✎</button>
+          <button class="btn-icon del" onclick="deleteTask(${t.id})" title="Удалить">✕</button>
+        </div>
+      </li>
+    `).join('');
+
+    // Список наград
+    document.getElementById('rewardsList').innerHTML = state.rewards.map(r => `
+      <li class="list-item">
+        <div>
+          <span>${r.title}</span>
+          <span class="badge">${r.cost} ₽</span>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <button class="action-btn btn-buy" onclick="buyReward(${r.id})">Купить</button>
+          <button class="btn-icon" onclick="editReward(${r.id})" title="Редактировать">✎</button>
+          <button class="btn-icon del" onclick="deleteReward(${r.id})" title="Удалить">✕</button>
+        </div>
+      </li>
+    `).join('');
+
+    // Журнал с фильтром по текущему месяцу
+    const journalList = document.getElementById('journalList');
+    const filter = document.getElementById('journalMonthFilter').value;
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+
+    const filteredHistory = state.history.filter(item => {
+      if (filter === 'all') return true;
+      const d = parseItemDate(item);
+      return d.getFullYear() === curYear && d.getMonth() === curMonth;
+    });
+
+    if (filteredHistory.length === 0) {
+      journalList.innerHTML = `<div style="color: var(--text-muted); padding: 12px 0; text-align: center;">В этом месяце журнал пока пуст. Самое время выполнить первое дело!</div>`;
+    } else {
+      journalList.innerHTML = filteredHistory.map(item => `
+        <div class="journal-item">
+          <div>
+            <strong>${item.title}</strong> — ${item.type === 'task' ? 'выполнен' : 'куплена награда'}
+            <div class="journal-date">${formatDisplayDate(item)}</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-weight: 600; color: ${item.type === 'task' ? 'var(--success)' : 'var(--danger)'};">
+              ${item.type === 'task' ? '+' : '-'}${item.points} ₽
+            </span>
+            <button class="btn-icon" onclick="editHistoryItem(${item.id})" title="Редактировать">✎</button>
+            <button class="btn-icon del" onclick="deleteHistoryItem(${item.id})" title="Удалить">✕</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    renderAnalytics();
+  }
+
+  function renderAnalytics() {
+    const now = new Date();
+    const todayStr = now.toDateString();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    let todayCount = 0, todayRub = 0;
+    let monthCount = 0, monthRub = 0;
+
+    const weeks = [
+      { name: '1-я неделя (1–7)', count: 0, rub: 0 },
+      { name: '2-я неделя (8–14)', count: 0, rub: 0 },
+      { name: '3-я неделя (15–21)', count: 0, rub: 0 },
+      { name: '4-я неделя (22–28)', count: 0, rub: 0 },
+      { name: '5-я неделя (29+)', count: 0, rub: 0 }
+    ];
+
+    const yearStats = MONTHS_RU.map(name => ({ name, count: 0, rub: 0 }));
+
+    state.history.forEach(item => {
+      if (item.type !== 'task') return;
+      const d = parseItemDate(item);
+
+      if (d.toDateString() === todayStr) {
+        todayCount++;
+        todayRub += item.points;
+      }
+
+      if (d.getFullYear() === currentYear) {
+        yearStats[d.getMonth()].count++;
+        yearStats[d.getMonth()].rub += item.points;
+
+        if (d.getMonth() === currentMonth) {
+          monthCount++;
+          monthRub += item.points;
+
+          const day = d.getDate();
+          if (day <= 7) { weeks[0].count++; weeks[0].rub += item.points; }
+          else if (day <= 14) { weeks[1].count++; weeks[1].rub += item.points; }
+          else if (day <= 21) { weeks[2].count++; weeks[2].rub += item.points; }
+          else if (day <= 28) { weeks[3].count++; weeks[3].rub += item.points; }
+          else { weeks[4].count++; weeks[4].rub += item.points; }
+        }
+      }
+    });
+
+    document.getElementById('todayTasksCount').textContent = todayCount;
+    document.getElementById('todayEarned').textContent = todayRub;
+    document.getElementById('monthTasksCount').textContent = monthCount;
+    document.getElementById('monthEarned').textContent = monthRub;
+
+    document.getElementById('weeksTableBody').innerHTML = weeks.map(w => `
+      <tr><td>${w.name}</td><td>${w.count}</td><td>${w.rub} ₽</td></tr>
+    `).join('');
+
+    document.getElementById('yearTableBody').innerHTML = yearStats.map((m, idx) => `
+      <tr style="${idx === currentMonth ? 'background: #232730; font-weight: 600;' : ''}">
+        <td>${m.name}</td><td>${m.count}</td><td>${m.rub} ₽</td>
+      </tr>
+    `).join('');
+  }
+
+  function exportData() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", `tracker_backup_${new Date().toISOString().slice(0,10)}.json`);
+    dlAnchorElem.click();
+  }
+
+  function importData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const loadedState = JSON.parse(e.target.result);
+        if (loadedState && Array.isArray(loadedState.tasks)) {
+          state = loadedState;
+          saveState();
+          alert('Данные успешно загружены!');
+        } else {
+          alert('Неверный формат файла бэкапа.');
+        }
+      } catch (err) {
+        alert('Ошибка при чтении файла бэкапа.');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  loadState();
+</script>
+</body>
+</html>
