@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <link rel="manifest" href="./manifest.json">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#121316">
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js', { scope: './' });
-  }
-</script>
   <meta charset="UTF-8">
+  <link rel="manifest" href="./manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#121316">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js');
+      });
+    }
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Система Геймификации Жизни</title>
   <style>
@@ -29,7 +32,6 @@
     body { background-color: var(--bg); color: var(--text); padding: 20px; display: flex; justify-content: center; }
     .container { width: 100%; max-width: 1000px; display: flex; flex-direction: column; gap: 20px; }
     
-    /* Шапка баланса */
     .balance-card {
       background: linear-gradient(135deg, #1e2025 0%, #262933 100%);
       border: 1px solid var(--border);
@@ -44,9 +46,8 @@
     .balance-title { font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
     .balance-value { font-size: 38px; font-weight: 700; color: var(--gold); margin-top: 4px; cursor: pointer; }
     .sync-status { font-size: 12px; color: var(--success); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
-    .backup-actions { display: flex; gap: 8px; }
+    .backup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
-    /* Сетка */
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
     
@@ -68,7 +69,6 @@
     }
     h2 { font-size: 17px; font-weight: 600; }
     
-    /* Поля ввода и кнопки */
     .input-row { display: flex; gap: 8px; }
     input, select, button {
       background: #121316;
@@ -89,8 +89,8 @@
     }
     button:hover { opacity: 0.9; }
     .btn-secondary { background: #2d3139; font-size: 12px; padding: 6px 12px; }
+    .btn-sync { background: #059669; font-size: 12px; padding: 6px 12px; color: #fff; }
     
-    /* Списки дел и наград */
     .items-list { display: flex; flex-direction: column; gap: 8px; list-style: none; max-height: 380px; overflow-y: auto; }
     .list-item {
       display: flex;
@@ -117,12 +117,10 @@
     .btn-icon:hover { color: #fff; }
     .btn-icon.del:hover { color: var(--danger); }
 
-    /* Таблицы */
     table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
     th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
     th { color: var(--text-muted); font-weight: 600; }
     
-    /* Журнал */
     .journal-box { max-height: 320px; overflow-y: auto; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
     .journal-item {
       background: #17181d;
@@ -145,13 +143,14 @@
     <div>
       <div class="balance-title">Текущий общий баланс (нажмите для изменения)</div>
       <div class="balance-value" onclick="manualEditBalance()" title="Редактировать баланс"><span id="pointsBalance">0</span> ₽</div>
-      <div class="sync-status">🟢 Google Таблица подключена</div>
+      <div class="sync-status" id="syncStatus">🟢 Google Таблица подключена</div>
     </div>
     <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
       Всего заработано: <span id="totalEarned" style="color: #fff;">0</span> ₽<br>
       Всего потрачено: <span id="totalSpent" style="color: #fff;">0</span> ₽
     </div>
     <div class="backup-actions">
+      <button class="btn-sync" onclick="syncFromGoogleSheets()">🔄 Синхронизировать</button>
       <button class="btn-secondary" onclick="exportData()">💾 Бэкап</button>
       <button class="btn-secondary" onclick="document.getElementById('importFile').click()">📂 Загрузить</button>
       <input type="file" id="importFile" style="display: none;" onchange="importData(event)">
@@ -291,6 +290,29 @@
     render();
   }
 
+  // Автоматическое получение свежих данных из Google Таблицы
+  async function syncFromGoogleSheets() {
+    const statusEl = document.getElementById('syncStatus');
+    if (statusEl) statusEl.innerText = '🔄 Синхронизация...';
+    try {
+      const res = await fetch(GOOGLE_SCRIPT_URL);
+      const data = await res.json();
+      if (data && data.status === 'success') {
+        state.balance = data.balance;
+        state.totalEarned = data.totalEarned;
+        state.totalSpent = data.totalSpent;
+        if (Array.isArray(data.history) && data.history.length > 0) {
+          state.history = data.history;
+        }
+        saveState();
+        if (statusEl) statusEl.innerText = '🟢 Google Таблица подключена';
+      }
+    } catch(e) {
+      console.log('Офлайн режим или загрузка локальных данных');
+      if (statusEl) statusEl.innerText = '🟢 Google Таблица подключена';
+    }
+  }
+
   function sendToGoogleSheets(action, payloadData) {
     if (!GOOGLE_SCRIPT_URL) return;
     fetch(GOOGLE_SCRIPT_URL, {
@@ -298,7 +320,7 @@
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: action, ...payloadData })
-    }).catch(err => console.error('Ошибка Google Таблицы:', err));
+    }).catch(err => console.error('Ошибка отправки в Google Таблицу:', err));
   }
 
   function addTask() {
@@ -673,7 +695,9 @@
     reader.readAsText(file);
   }
 
+  // Запуск при старте страницы: загружаем локальные данные и запрашиваем свежие из Google Таблицы
   loadState();
+  syncFromGoogleSheets();
 </script>
 </body>
 </html>
