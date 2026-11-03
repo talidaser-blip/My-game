@@ -184,7 +184,7 @@
     </div>
   </div>
 
-  <!-- Сводные таблицы и аналитика -->
+  <!-- Сводные итоги и статистика -->
   <div class="panel">
     <div class="panel-header">
       <h2>Сводные итоги и статистика</h2>
@@ -306,6 +306,9 @@
         if (Array.isArray(data.history) && data.history.length > 0) {
           state.history = data.history;
         }
+        if (Array.isArray(data.tasks) && data.tasks.length > 0) {
+          state.tasks = data.tasks;
+        }
         saveState();
         if (statusEl) statusEl.innerText = '🟢 Google Таблица подключена';
       }
@@ -332,10 +335,12 @@
     state.tasks.push({ id: Date.now(), title, points });
     document.getElementById('taskTitle').value = '';
     saveState();
+    sendToGoogleSheets('save_all_tasks', { tasks: state.tasks });
   }
 
   function editTask(id) {
-    const task = state.tasks.find(t => t.id === id);
+    const targetId = String(id);
+    const task = state.tasks.find(t => String(t.id) === targetId);
     if (!task) return;
     const newTitle = prompt('Название дела:', task.title);
     if (newTitle === null) return;
@@ -346,17 +351,21 @@
       task.title = newTitle.trim();
       task.points = p;
       saveState();
+      sendToGoogleSheets('save_all_tasks', { tasks: state.tasks });
     }
   }
 
   function deleteTask(id) {
+    const targetId = String(id);
     if (!confirm('Удалить это дело из списка?')) return;
-    state.tasks = state.tasks.filter(t => t.id !== id);
+    state.tasks = state.tasks.filter(t => String(t.id) !== targetId);
     saveState();
+    sendToGoogleSheets('save_all_tasks', { tasks: state.tasks });
   }
 
   function completeTask(id) {
-    const task = state.tasks.find(t => t.id === id);
+    const targetId = String(id);
+    const task = state.tasks.find(t => String(t.id) === targetId);
     if (!task) return;
 
     state.balance += task.points;
@@ -397,7 +406,8 @@
   }
 
   function editReward(id) {
-    const r = state.rewards.find(x => x.id === id);
+    const targetId = String(id);
+    const r = state.rewards.find(x => String(x.id) === targetId);
     if (!r) return;
     const newTitle = prompt('Название награды:', r.title);
     if (newTitle === null) return;
@@ -412,13 +422,15 @@
   }
 
   function deleteReward(id) {
+    const targetId = String(id);
     if (!confirm('Удалить эту награду?')) return;
-    state.rewards = state.rewards.filter(r => r.id !== id);
+    state.rewards = state.rewards.filter(r => String(r.id) !== targetId);
     saveState();
   }
 
   function buyReward(id) {
-    const reward = state.rewards.find(r => r.id === id);
+    const targetId = String(id);
+    const reward = state.rewards.find(r => String(r.id) === targetId);
     if (!reward) return;
     if (state.balance < reward.cost) {
       alert('Недостаточно рублей на балансе!');
@@ -453,7 +465,8 @@
   }
 
   function editHistoryItem(id) {
-    const item = state.history.find(h => h.id === id);
+    const targetId = String(id);
+    const item = state.history.find(h => String(h.id) === targetId);
     if (!item) return;
 
     const newTitle = prompt('Наименование записи:', item.title);
@@ -476,7 +489,7 @@
       saveState();
 
       sendToGoogleSheets('edit', {
-        id: id,
+        id: targetId,
         title: item.title,
         points: item.type === 'task' ? item.points : -item.points,
         balance: state.balance
@@ -485,24 +498,24 @@
   }
 
   function deleteHistoryItem(id) {
-  const targetId = String(id);
-  const item = state.history.find(h => String(h.id) === targetId);
-  if (!item) return;
-  if (!confirm(`Удалить «${item.title}» из журнала?`)) return;
+    const targetId = String(id);
+    const item = state.history.find(h => String(h.id) === targetId);
+    if (!item) return;
+    if (!confirm(`Удалить «${item.title}» из журнала?`)) return;
 
-  if (item.type === 'task') {
-    state.balance -= item.points;
-    state.totalEarned -= item.points;
-  } else {
-    state.balance += item.points;
-    state.totalSpent -= item.points;
+    if (item.type === 'task') {
+      state.balance -= item.points;
+      state.totalEarned -= item.points;
+    } else {
+      state.balance += item.points;
+      state.totalSpent -= item.points;
+    }
+
+    state.history = state.history.filter(h => String(h.id) !== targetId);
+    saveState();
+
+    sendToGoogleSheets('delete', { id: targetId });
   }
-
-  state.history = state.history.filter(h => String(h.id) !== targetId);
-  saveState();
-
-  sendToGoogleSheets('delete', { id: targetId });
-}
 
   function manualEditBalance() {
     const val = prompt('Укажите точный баланс (₽):', state.balance);
@@ -549,9 +562,9 @@
           <span class="badge">+${t.points} ₽</span>
         </div>
         <div style="display: flex; gap: 4px; align-items: center;">
-          <button class="action-btn btn-complete" onclick="completeTask(${t.id})">Выполнить</button>
-          <button class="btn-icon" onclick="editTask(${t.id})" title="Редактировать">✎</button>
-          <button class="btn-icon del" onclick="deleteTask(${t.id})" title="Удалить">✕</button>
+          <button class="action-btn btn-complete" onclick="completeTask('${t.id}')">Выполнить</button>
+          <button class="btn-icon" onclick="editTask('${t.id}')" title="Редактировать">✎</button>
+          <button class="btn-icon del" onclick="deleteTask('${t.id}')" title="Удалить">✕</button>
         </div>
       </li>
     `).join('');
@@ -564,9 +577,9 @@
           <span class="badge">${r.cost} ₽</span>
         </div>
         <div style="display: flex; gap: 4px; align-items: center;">
-          <button class="action-btn btn-buy" onclick="buyReward(${r.id})">Купить</button>
-          <button class="btn-icon" onclick="editReward(${r.id})" title="Редактировать">✎</button>
-          <button class="btn-icon del" onclick="deleteReward(${r.id})" title="Удалить">✕</button>
+          <button class="action-btn btn-buy" onclick="buyReward('${r.id}')">Купить</button>
+          <button class="btn-icon" onclick="editReward('${r.id}')" title="Редактировать">✎</button>
+          <button class="btn-icon del" onclick="deleteReward('${r.id}')" title="Удалить">✕</button>
         </div>
       </li>
     `).join('');
@@ -598,7 +611,7 @@
               ${item.type === 'task' ? '+' : '-'}${item.points} ₽
             </span>
             <button class="btn-icon" onclick="editHistoryItem('${item.id}')" title="Редактировать">✎</button>
-<button class="btn-icon del" onclick="deleteHistoryItem('${item.id}')" title="Удалить">✕</button>
+            <button class="btn-icon del" onclick="deleteHistoryItem('${item.id}')" title="Удалить">✕</button>
           </div>
         </div>
       `).join('');
