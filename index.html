@@ -317,7 +317,6 @@
       if (statusEl) statusEl.innerText = '🟢 Google Таблица подключена';
     }
   }
-
   function sendToGoogleSheets(action, payloadData) {
     if (!GOOGLE_SCRIPT_URL) return;
     fetch(GOOGLE_SCRIPT_URL, {
@@ -354,7 +353,6 @@
       sendToGoogleSheets('save_all_tasks', { tasks: state.tasks });
     }
   }
-
   function deleteTask(id) {
     const targetId = String(id);
     if (!confirm('Удалить это дело из списка?')) return;
