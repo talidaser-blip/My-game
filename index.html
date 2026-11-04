@@ -25,6 +25,7 @@
       --text-muted: #9ca3af;
       --border: #2d3139;
       --success: #10b981;
+      --lime: #10ef7e;
       --gold: #fbbf24;
       --danger: #ef4444;
     }
@@ -122,6 +123,8 @@
     th { color: var(--text-muted); font-weight: 600; }
     
     .journal-box { max-height: 320px; overflow-y: auto; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+    
+    /* Базовый стиль записи журнала */
     .journal-item {
       background: #17181d;
       padding: 10px 12px;
@@ -130,8 +133,32 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      transition: background 0.2s, border-color 0.2s;
     }
-    .journal-date { color: var(--text-muted); font-size: 11px; margin-top: 3px; }
+
+    /* Подсветка для нечётных дней (1, 3, 5, 7...) — белый акцент */
+    .journal-item.day-odd {
+      border-left: 4px solid #ffffff;
+      background: #17181d;
+    }
+    .journal-item.day-odd .journal-date {
+      color: #e5e7eb;
+    }
+
+    /* Подсветка для чётных дней (2, 4, 6, 8...) — яркий салатовый акцент */
+    .journal-item.day-even {
+      border-left: 4px solid var(--lime);
+      background: rgba(16, 239, 126, 0.05);
+      border-top-color: rgba(16, 239, 126, 0.25);
+      border-right-color: rgba(16, 239, 126, 0.25);
+      border-bottom-color: rgba(16, 239, 126, 0.25);
+    }
+    .journal-item.day-even .journal-date {
+      color: var(--lime);
+      font-weight: 500;
+    }
+
+    .journal-date { font-size: 11px; margin-top: 3px; }
     .stat-badge { font-weight: bold; color: var(--gold); }
   </style>
 </head>
@@ -292,7 +319,6 @@
     render();
   }
 
-  // Автоматическое получение свежих данных из Google Таблицы
   async function syncFromGoogleSheets() {
     const statusEl = document.getElementById('syncStatus');
     if (statusEl) statusEl.innerText = '🔄 Синхронизация...';
@@ -317,6 +343,7 @@
       if (statusEl) statusEl.innerText = '🟢 Google Таблица подключена';
     }
   }
+
   function sendToGoogleSheets(action, payloadData) {
     if (!GOOGLE_SCRIPT_URL) return;
     fetch(GOOGLE_SCRIPT_URL, {
@@ -353,6 +380,7 @@
       sendToGoogleSheets('save_all_tasks', { tasks: state.tasks });
     }
   }
+
   function deleteTask(id) {
     const targetId = String(id);
     if (!confirm('Удалить это дело из списка?')) return;
@@ -526,14 +554,15 @@
   }
 
   function parseItemDate(item) {
-    if (item.timestamp) return new Date(item.timestamp);
     if (item.dateTimeStr) {
       const parts = item.dateTimeStr.split(' ');
       const dateParts = parts[0].split('.');
       if (dateParts.length === 3) {
-        return new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T00:00:00`);
+        const timePart = parts[1] || '00:00';
+        return new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T${timePart}:00`);
       }
     }
+    if (item.timestamp) return new Date(item.timestamp);
     return new Date();
   }
 
@@ -582,7 +611,7 @@
       </li>
     `).join('');
 
-    // Журнал с фильтром по текущему месяцу
+    // Журнал с фильтром по текущему месяцу и чередующейся подсветкой дней
     const journalList = document.getElementById('journalList');
     const filter = document.getElementById('journalMonthFilter').value;
     const now = new Date();
@@ -598,21 +627,28 @@
     if (filteredHistory.length === 0) {
       journalList.innerHTML = `<div style="color: var(--text-muted); padding: 12px 0; text-align: center;">В этом месяце журнал пока пуст. Самое время выполнить первое дело!</div>`;
     } else {
-      journalList.innerHTML = filteredHistory.map(item => `
-        <div class="journal-item">
-          <div>
-            <strong>${item.title}</strong> — ${item.type === 'task' ? 'выполнен' : 'куплена награда'}
-            <div class="journal-date">${formatDisplayDate(item)}</div>
+      journalList.innerHTML = filteredHistory.map(item => {
+        const d = parseItemDate(item);
+        const dayOfMonth = d.getDate();
+        // 1, 3, 5... — day-odd (белый акцент), 2, 4, 6... — day-even (салатовый акцент)
+        const dayClass = (dayOfMonth % 2 === 0) ? 'day-even' : 'day-odd';
+
+        return `
+          <div class="journal-item ${dayClass}">
+            <div>
+              <strong>${item.title}</strong> — ${item.type === 'task' ? 'выполнен' : 'куплена награда'}
+              <div class="journal-date">${formatDisplayDate(item)}</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-weight: 600; color: ${item.type === 'task' ? 'var(--success)' : 'var(--danger)'};">
+                ${item.type === 'task' ? '+' : '-'}${item.points} ₽
+              </span>
+              <button class="btn-icon" onclick="editHistoryItem('${item.id}')" title="Редактировать">✎</button>
+              <button class="btn-icon del" onclick="deleteHistoryItem('${item.id}')" title="Удалить">✕</button>
+            </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-weight: 600; color: ${item.type === 'task' ? 'var(--success)' : 'var(--danger)'};">
-              ${item.type === 'task' ? '+' : '-'}${item.points} ₽
-            </span>
-            <button class="btn-icon" onclick="editHistoryItem('${item.id}')" title="Редактировать">✎</button>
-            <button class="btn-icon del" onclick="deleteHistoryItem('${item.id}')" title="Удалить">✕</button>
-          </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
     renderAnalytics();
@@ -709,7 +745,6 @@
     reader.readAsText(file);
   }
 
-  // Запуск при старте страницы: загружаем локальные данные и запрашиваем свежие из Google Таблицы
   loadState();
   syncFromGoogleSheets();
 </script>
